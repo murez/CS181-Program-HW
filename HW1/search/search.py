@@ -96,13 +96,17 @@ def depthFirstSearch(problem):
     visiting_stack.push((now_state, []))
     while (not visiting_stack.isEmpty()) and (not problem.isGoalState(now_state)):
         now_state, now_actions = visiting_stack.pop()
+        if problem.isGoalState(now_state):
+            return now_actions
         visited.add(now_state)
         successors = problem.getSuccessors(now_state)
         for next_state, action, cost in successors:
             if next_state not in visited:
+                # visiting_stack.push((now_state, now_actions))
                 result_action = now_actions + [action]
                 visiting_stack.push((next_state, result_action))
-    return result_action
+                # break
+
 
 
 def breadthFirstSearch(problem):
@@ -175,7 +179,7 @@ def aStarSearch(problem, heuristic=nullHeuristic):
             for next_state, action, cost in successors:
                 if next_state not in visited:
                     result_action = now_actions + [action]
-                    visiting_pq.push((next_state, result_action), heuristic(next_state, problem))
+                    visiting_pq.push((next_state, result_action), problem.getCostOfActions(result_action)+heuristic(next_state, problem))
     return result_action
 
 

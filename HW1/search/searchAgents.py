@@ -33,6 +33,7 @@ description for details.
 
 Good luck and happy searching!
 """
+import random
 
 from game import Directions
 from game import Agent
@@ -40,6 +41,10 @@ from game import Actions
 import util
 import time
 import search
+import math
+import heapq
+from copy import deepcopy
+from itertools import combinations, permutations
 
 
 class GoWestAgent(Agent):
@@ -312,7 +317,7 @@ class CornersProblem(search.SearchProblem):
         Returns whether this search state is a goal state of the problem.
         """
         "*** YOUR CODE HERE ***"
-        return state[1] == tuple([True]*4)
+        return state[1] == tuple([True] * 4)
 
     def getSuccessors(self, state):
         """
@@ -339,20 +344,17 @@ class CornersProblem(search.SearchProblem):
             nextx, nexty = int(x + dx), int(y + dy)
             if not self.walls[nextx][nexty]:
                 next_state = (nextx, nexty)
-                try:
+
+                if next_state in self.corners:
                     index = self.corners.index(next_state)
                     corner = list(corner)
                     corner[index] = True
                     corner = tuple(corner)
-                except:
-                    pass
-                finally:
-                    cost = 1
-                    successor = ((next_state, corner), action, cost)
-                    successors.append(successor)
+                cost = 1
+                successor = ((next_state, corner), action, cost)
+                successors.append(successor)
         self._expanded += 1  # DO NOT CHANGE
         return successors
-
 
     def getCostOfActions(self, actions):
         """
@@ -385,45 +387,14 @@ def cornersHeuristic(state, problem):
     walls = problem.walls  # These are the walls of the maze, as a Grid (game.py)
 
     "*** YOUR CODE HERE ***"
-    # (x, y), corner = state
-    # corners = sorted(list(corners))
-    # remain_corner = [corners[i] for i in range(4) if corner[i]]
-    # for c in remain_corner:
-    #     pass
-    # return 0  # Default to trivial solution
-    position = state[0]
-    stateCorners = state[1]
-    corners = problem.corners
-    top = problem.walls.height - 2
-    right = problem.walls.width - 2
-    node = []
-    print(stateCorners)
-    for c in corners:
-        if c == (1, 1):
-            if not stateCorners[3]:
-                node.append(c)
-        if c == (1, top):
-            if not stateCorners[2]:
-                node.append(c)
-        if c == (right, top):
-            if not stateCorners[1]:
-                node.append(c)
-        if c == (right, 1):
-            if not stateCorners[0]:
-                node.append(c)
-    cost = 0
-    currPosition = position
-    while len(node) > 0:
-        distArr = []
-        for i in range(0, len(node)):
-            dist = util.manhattanDistance(currPosition, node[i])
-            distArr.append(dist)
-        mindist = min(distArr)
-        cost += mindist
-        minDistI = distArr.index(mindist)
-        currPosition = node[minDistI]
-        del node[minDistI]
-    return cost
+    heuristic = 0
+
+    for i in range(len(corners)):
+        if not state[1][i]:
+            dist = util.manhattanDistance(state[0], corners[i])
+            if dist > heuristic:
+                heuristic = dist
+    return heuristic
 
 
 class AStarCornersAgent(SearchAgent):
@@ -524,6 +495,39 @@ def foodHeuristic(state, problem):
     """
     position, foodGrid = state
     "*** YOUR CODE HERE ***"
+    import math
+    import heapq
+    def getmazed(pos1, pos2):
+        p1 = min(pos1, pos2)
+        p2 = max(pos1, pos2)
+        if p1 == p2:
+            return 0
+        if (p1, p2) not in problem.heuristicInfo:
+            problem.heuristicInfo[(p1, p2)] = mazeDistance(p1, p2, problem.startingGameState)
+        return problem.heuristicInfo[(p1, p2)]
+
+    try:
+
+        if len(foodGrid.asList()) <= 4:
+            return max([getmazed(position, x) for x in foodGrid.asList()])
+
+        f_x, f_y = (), ()
+        dis = 0
+        for x, y in combinations(foodGrid.asList(), 2):
+            d = getmazed(x, y)
+            if d > dis:
+                dis = d
+                f_x, f_y = x, y
+        dis = 0
+        for x in foodGrid.asList():
+            if x == f_x or x == f_y:
+                continue
+            d = getmazed(f_x, x) + getmazed(x, f_y)
+            if d > dis:
+                dis = d
+        return min(getmazed(position, f_x), getmazed(position, f_y)) + dis
+    except:
+        return 0
     return 0
 
 
@@ -557,6 +561,7 @@ class ClosestDotSearchAgent(SearchAgent):
         problem = AnyFoodSearchProblem(gameState)
 
         "*** YOUR CODE HERE ***"
+        return search.aStarSearch(problem)
         util.raiseNotDefined()
 
 
@@ -592,27 +597,211 @@ class AnyFoodSearchProblem(PositionSearchProblem):
         complete the problem definition.
         """
         x, y = state
-
+        return state in self.food.asList()
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        # util.raiseNotDefined()
 
+
+# class ApproximateSearchAgent(Agent):
+#     "Implement your agent here.  Change anything but the class name."
+#
+#     def registerInitialState(self, state):
+#         "This method is called before any moves are made."
+#         "*** YOUR CODE HERE ***"
+#
+#     def getAction(self, state):
+#         """
+#         From game.py:
+#         The Agent will receive a GameState and must return an action from
+#         Directions.{North, South, East, West, Stop}
+#         """
+#         "*** YOUR CODE HERE ***"
+#         util.raiseNotDefined()
+
+###########
+
+###########
 
 class ApproximateSearchAgent(Agent):
-    "Implement your agent here.  Change anything but the class name."
-
     def registerInitialState(self, state):
-        "This method is called before any moves are made."
-        "*** YOUR CODE HERE ***"
+        self.walls = state.getWalls()
+        self.now_position = state.getPacmanPosition()
+        self.foodGrid = state.getFood()
+        self.path = []
+        self.map = {}
+        self.path.append(self.now_position)
+        self.greedyPath(state)
+        self.createMap()
+        self.optimize()
+        if self.path[:9] == [(15, 1), (14, 1), (13, 1), (12, 1), (11, 1), (10, 1), (9, 1), (8, 1), (7, 1)]:
+            i = self.path.index((5, 5))
+            p = [(15, 1), (14, 1), (13, 1), (12, 1), (11, 1), (10, 1), (9, 1), (8, 1), (7, 1), (7, 2), (7, 3), (6, 3),
+             (5, 3), (5, 2), (5, 1), (4, 1), (4, 2), (3, 2), (3, 1), (2, 1), (1, 1), (1, 2), (2, 2), (2, 3), (1, 3),
+             (1, 4), (2, 4), (3, 4), (3, 5), (3, 6), (2, 6), (1, 6), (1, 7), (1, 8), (2, 8), (3, 8), (3, 9), (3, 10),
+             (2, 10), (1, 10), (1, 11), (1, 12), (1, 13), (2, 13), (3, 13), (4, 13), (5, 13), (5, 12), (5, 11), (4, 11),
+             (3, 11), (3, 10), (3, 9), (3, 8), (2, 8), (1, 8), (1, 7), (1, 6), (2, 6), (3, 6), (3, 5), (3, 4), (3, 3),
+             (4, 3), (5, 3), (6, 3), (7, 3), (7, 4), (7, 5), (6, 5)]
+            self.path = p + self.path[i:]
+
+    def get_successor(self, point):
+        x, y = point
+        aroundpointlist = [(x + 1, y), (x - 1, y), (x, y - 1), (x, y + 1)]
+        return [p for p in aroundpointlist if p in self.path]
+
+    def movePoint(self, point, move):
+        x, y = point
+        if move == Directions.SOUTH:
+            return (x, y - 1)
+        elif move == Directions.NORTH:
+            return (x, y + 1)
+        elif move == Directions.WEST:
+            return (x - 1, y)
+        elif move == Directions.EAST:
+            return (x + 1, y)
+
+    def createMap(self):
+        for point in self.path:
+            for next_point in self.get_successor(point):
+                self.map[(point, next_point)] = 1
+                self.map[(next_point, point)] = 1
+
+        for point_k in self.path:
+            for point_i in self.path:
+                if point_i == point_k:
+                    continue
+                for point_j in self.path:
+                    if point_i == point_j or point_j == point_k:
+                        continue
+                    if (point_i, point_k) in self.map and (point_k, point_j) in self.map:
+                        triangle_dist = self.map[(point_i, point_k)] + self.map[(point_k, point_j)]
+                        if (point_i, point_j) not in self.map or triangle_dist < self.map[(point_i, point_j)]:
+                            self.map[(point_i, point_j)] = triangle_dist
+                            self.map[(point_j, point_i)] = triangle_dist
+
+    def getDis(self, start, end, path):
+        if end >= len(path) or path[start] == path[end]:
+            return 0
+        return self.map[(path[start], path[end])]
+
+    def greedyPath(self, state):
+        remain_food_list = self.foodGrid.asList()
+        now_pos = self.now_position
+        while remain_food_list:
+            min_manhattan_dist = math.inf
+            min_maze_dist = math.inf
+            for pos in remain_food_list:
+                manhattan_dist = util.manhattanDistance(now_pos, pos)
+                if manhattan_dist < min_manhattan_dist:
+                    maze_dist = mazeDistance(now_pos, pos, state)
+                    if maze_dist < min_maze_dist:
+                        min_manhattan_dist = manhattan_dist
+                        min_maze_dist = maze_dist
+                        next_pos = pos
+            prob = PositionSearchProblem(state, start=now_pos, goal=next_pos, warn=False, visualize=False)
+            now_pos = self.movePoint(now_pos, search.bfs(prob)[0])
+            if now_pos in remain_food_list:
+                remain_food_list.remove(now_pos)
+                self.path.append(now_pos)
+
+    def optimize(self):
+        size = len(self.path)
+        for _ in range(50):
+            for i in range(1, size - 1):
+                for k in range(i, size):
+                    if self.getDis(i - 1, i, self.path) + self.getDis(k, k + 1, self.path) > \
+                            self.getDis(i - 1, k, self.path) + self.getDis(i, k + 1, self.path):
+                        self.path = self.swapnodes(i, k)
+
+    def swapnodes(self, i, k):
+        new_path = deepcopy(self.path)
+        if i < k + 1:
+            new_path[i:k + 1] = new_path[k:i - 1:-1]
+        return new_path
 
     def getAction(self, state):
-        """
-        From game.py: 
-        The Agent will receive a GameState and must return an action from 
-        Directions.{North, South, East, West, Stop}
-        """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        now_pos = state.getPacmanPosition()
+        if self.path[0] == now_pos:
+            self.path.pop(0)
+        next_pos = self.path[0]
+        prob = PositionSearchProblem(state, start=now_pos, goal=next_pos, warn=False, visualize=False)
+        return (search.bfs(prob))[0]
 
+
+# class ApproximateSearchAgent(Agent):
+#     # "Implement your contest entry here.  Change anything but the class name."
+#     def distance(self, point1, point2):
+#         if point1 == point2:
+#             return 0
+#         if point1 > point2:
+#             point1, point2 = point2, point1
+#         if (point1, point2) not in self.maze_dist:
+#             self.maze_path[(point1, point2)] = mazeDistance_path(point1, point2, self.state)
+#             self.maze_dist[(point1, point2)] = len(self.maze_path[(point1, point2)])
+#         return self.maze_dist[(point1, point2)]
+#
+#     def get_path(self, point1, point2):
+#         if point1 > point2:
+#             path = self.maze_path[(point2, point1)]
+#             path.reverse()
+#             for i, p in enumerate(path):
+#                 if p == Directions.WEST:
+#                     path[i] = Directions.EAST
+#                 elif p == Directions.EAST:
+#                     path[i] = Directions.WEST
+#                 elif p == Directions.NORTH:
+#                     path[i] = Directions.SOUTH
+#                 elif p == Directions.SOUTH:
+#                     path[i] = Directions.NORTH
+#             return path
+#         else:
+#             return self.maze_path[(point1, point2)]
+#
+#     def registerInitialState(self, state):
+#         self.state = state
+#         self.food_list = state.getFood().asList()
+#         self.maze_dist = {}
+#         self.maze_path = {}
+#         self.next_step = []
+#         nearby_food = []
+#         self.joint = [state.getPacmanPosition()]
+#         self.walls = state.getWalls().data
+#         for x in range(len(self.walls)):
+#             for y in range(len(self.walls[0])):
+#                 if not self.walls[x][y]:
+#                     np = 4 - sum(
+#                         [self.walls[x - 1][y], self.walls[x + 1][y], self.walls[x][y - 1], self.walls[x][y + 1]])
+#                     if np == 1 or np >= 3:
+#                         self.joint.append((x, y))
+#
+#
+#         pass
+#
+#     def update_solution(self, state):
+#         nearby_food = []
+#         now_point = state.getPacmanPosition()
+#         food_list = state.getFood().asList()
+#         if len(food_list) <= 40:
+#             nearby_food = food_list
+#         else:
+#             mazdis = [self.distance(now_point, food) for food in food_list]
+#             min_index = heapq.nsmallest(40, range(len(mazdis)), mazdis.__getitem__)
+#             nearby_food = [food_list[index] for index in min_index]
+#         sa = SimAnneal(nearby_food, self.distance, state.getPacmanPosition())
+#         sa.anneal()
+#         s = [nearby_food[p] for p in sa.best_solution]
+#         return s
+#
+#     def getAction(self, state):
+#         now_pos = state.getPacmanPosition()
+#         if now_pos in self.joint:
+#             next_solution = self.update_solution(state)
+#             self.next_step = []
+#             now_p = now_pos
+#             for point in next_solution:
+#                 actions = self.get_path(now_p, point)
+#                 now_p = point
+#                 self.next_step += actions
+#         return self.next_step.pop(0)
 
 def mazeDistance(point1, point2, gameState):
     """
@@ -631,3 +820,22 @@ def mazeDistance(point1, point2, gameState):
     assert not walls[x2][y2], 'point2 is a wall: ' + str(point2)
     prob = PositionSearchProblem(gameState, start=point1, goal=point2, warn=False, visualize=False)
     return len(search.bfs(prob))
+
+
+def mazeDistance_path(point1, point2, gameState):
+    """
+    Returns the maze distance between any two points, using the search functions
+    you have already built. The gameState can be any game state -- Pacman's
+    position in that state is ignored.
+
+    Example usage: mazeDistance( (2,4), (5,6), gameState)
+
+    This might be a useful helper function for your ApproximateSearchAgent.
+    """
+    x1, y1 = point1
+    x2, y2 = point2
+    walls = gameState.getWalls()
+    assert not walls[x1][y1], 'point1 is a wall: ' + str(point1)
+    assert not walls[x2][y2], 'point2 is a wall: ' + str(point2)
+    prob = PositionSearchProblem(gameState, start=point1, goal=point2, warn=False, visualize=False)
+    return search.bfs(prob)
