@@ -37,13 +37,13 @@ def score(score_value, ghost_state_base, ghost_state_zero, ghost_value, food_num
 
 pbounds = {
     "score_value": (0.01, 10.0),
-    "ghost_state_base": (0.01, 10.0),
-    "ghost_state_zero": (-10.0, 10.0),
+    "ghost_state_base": (0.01, 100.0),
+    "ghost_state_zero": (-20.0, 20.0),
     "ghost_value": (-10.0, 10.0),
     "food_num_value": (-10.0, 10.0),
     "food_dis_value": (-10.0, 10.0),
     "capsule_dis_value": (-10.0, 10.0),
-    "capsule_dis_num": (-10.0, 10.0)
+    "capsule_dis_num": (-10.0, 50.0)
 }
 
 optimizer = BayesianOptimization(
