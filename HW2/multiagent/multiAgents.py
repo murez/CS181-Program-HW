@@ -273,7 +273,7 @@ def betterEvaluationFunction(currentGameState):
     Your extreme ghost-hunting, pellet-nabbing, food-gobbling, unstoppable
     evaluation function (question 5).
 
-    DESCRIPTION: <write something here so we know what you did>
+    DESCRIPTION: just reuse the ReflexAgent code and modify some values
     """
     "*** YOUR CODE HERE ***"
     newPos = currentGameState.getPacmanPosition()
@@ -317,39 +317,12 @@ better = betterEvaluationFunction
 #         "*** YOUR CODE HERE ***"
 #         util.raiseNotDefined()
 
-def bestEvaluationFunction(currentGameState):
-    """
-    Your extreme ghost-hunting, pellet-nabbing, food-gobbling, unstoppable
-    evaluation function (question 5).
-
-    DESCRIPTION: <write something here so we know what you did>
-    """
-    "*** YOUR CODE HERE ***"
-    newPos = currentGameState.getPacmanPosition()
-
-    value = currentGameState.getScore()
-    value -= 2.71828 ** (
-            2 - min(manhattanDistance(newPos, ghost.getPosition()) for ghost in currentGameState.getGhostStates()))
-    value += sum((ghost.scaredTimer - manhattanDistance(newPos, ghost.getPosition()))
-                 for ghost in currentGameState.getGhostStates()
-                 if ghost.scaredTimer > manhattanDistance(newPos, ghost.getPosition()))
-    if currentGameState.getNumFood():
-        value -= 5 * currentGameState.getNumFood()
-        value -= 2 * min(manhattanDistance(newPos, foodPos)
-                         for foodPos in currentGameState.getFood().asList())
-
-    if currentGameState.getCapsules():
-        value -= min(manhattanDistance(newPos, capsulePos) for capsulePos in currentGameState.getCapsules())
-
-    return value
-
 
 class ContestAgent(ExpectimaxAgent):
     def __init__(self, evalFn='bestEvaluationFunction', depth='3'):
-        self.index = 0  # Pacman is always agent index 0
-        # self.evaluationFunction = util.lookup(evalFn, globals())
+        self.step_num = 0
+        self.index = 0
         self.depth = int(depth)
-
         self.ghost_state_base = 2.71828
         self.ghost_state_zero = 2
         self.ghost_value = 1
@@ -357,16 +330,44 @@ class ContestAgent(ExpectimaxAgent):
         self.food_dis_value = 2
         self.capsule_dis_value = 1
         self.capsule_dis_num = 0
-        with open("./data_2.json", 'rb') as f:
-            data = json.load(f)
-            self.score_value = data["score_value"]
-            self.ghost_state_base = data["ghost_state_base"]
-            self.ghost_state_zero = data["ghost_state_zero"]
-            self.ghost_value = data["ghost_value"]
-            self.food_num_value = data["food_num_value"]
-            self.food_dis_value = data["food_dis_value"]
-            self.capsule_dis_value = data["capsule_dis_value"]
-            self.capsule_dis_num = data["capsule_dis_num"]
+        # with open("./data_2.json", 'rb') as f:
+        #     data = json.load(f)
+        #
+        data = {'score_value': 3.27842734393806,
+                'ghost_state_base': 25.016548117695503,
+                'ghost_state_zero': -10.93398511637683,
+                'ghost_value': 0.8525205290207509,
+                'food_num_value': 2.8033848493572613,
+                'food_dis_value': 0.45338572272390465,
+                'capsule_dis_value': 1.0371199816848211,
+                'capsule_dis_num': 16.71095441006094,
+                'final': 2554.2}
+        # these parameters are optimized by bayesian optimization
+        self.score_value = data["score_value"]
+        self.ghost_state_base = data["ghost_state_base"]
+        self.ghost_state_zero = data["ghost_state_zero"]
+        self.ghost_value = data["ghost_value"]
+        self.food_num_value = data["food_num_value"]
+        self.food_dis_value = data["food_dis_value"]
+        self.capsule_dis_value = data["capsule_dis_value"]
+        self.capsule_dis_num = data["capsule_dis_num"]
+        self.previousState = None
+
+    def getAction(self, gameState):
+        """
+        Returns the expectimax action using self.depth and self.evaluationFunction
+
+        All ghosts should be modeled as choosing uniformly at random from their
+        legal moves.
+        """
+        "*** YOUR CODE HERE ***"
+        self.step_num += 1
+        if 610 >= self.step_num >= 607:
+            pos = gameState.getPacmanPosition()
+            if (pos[0]+1, pos[1]) not in gameState.getWalls().asList():
+                return Directions.EAST
+
+        return self.expectimax(0, gameState, 0)
 
     def evaluationFunction(self, currentGameState):
         """
@@ -381,21 +382,32 @@ class ContestAgent(ExpectimaxAgent):
         value = self.score_value * currentGameState.getScore()
         # value -= self.ghost_state_base ** (self.ghost_state_zero - min(manhattanDistance(newPos, ghost.getPosition())
         #                                                                for ghost in currentGameState.getGhostStates()))
-
+        scared_ghost = 0
+        ghost_num = 0
         for ghost in currentGameState.getGhostStates():
+            ghost_num += 1
             if ghost.scaredTimer <= 0:
                 value -= self.ghost_state_base ** (
-                            self.ghost_state_zero - manhattanDistance(newPos, ghost.getPosition()))
+                        self.ghost_state_zero - manhattanDistance(newPos, ghost.getPosition()))
+            else:
+                scared_ghost += 1
 
         value += self.ghost_value * sum((ghost.scaredTimer - manhattanDistance(newPos, ghost.getPosition()))
-                     for ghost in currentGameState.getGhostStates()
-                     if ghost.scaredTimer > manhattanDistance(newPos, ghost.getPosition()))
+                                        for ghost in currentGameState.getGhostStates()
+                                        if ghost.scaredTimer > manhattanDistance(newPos, ghost.getPosition()))
         if currentGameState.getNumFood():
             value -= self.food_num_value * currentGameState.getNumFood()
             value -= self.food_dis_value * min(manhattanDistance(newPos, foodPos)
-                             for foodPos in currentGameState.getFood().asList())
+                                               for foodPos in currentGameState.getFood().asList())
+
+        # if scared_ghost >= ghost_num / 2:
+        #     scared_rate = -1
+        # else:
+        #     scared_rate = 1
+        scared_rate = 1
 
         if currentGameState.getCapsules():
-            value -= self.capsule_dis_value * min(manhattanDistance(newPos, capsulePos) for capsulePos in currentGameState.getCapsules())
-        value += self.capsule_dis_num * len(currentGameState.getCapsules())
+            value -= scared_rate * self.capsule_dis_value * min(
+                manhattanDistance(newPos, capsulePos) for capsulePos in currentGameState.getCapsules())
+        value += scared_rate * self.capsule_dis_num * len(currentGameState.getCapsules())
         return value
