@@ -220,8 +220,9 @@ class ApproximateQAgent(PacmanQAgent):
 
 class BetterExtractor(FeatureExtractor):
     "Your extractor entry goes here.  Add features for capsuleClassic."
-
-
+    def __init__(self):
+        import json
+        self.param = json.load(open('parameters.json'))
 
     def hasWeakGhosts(self, ghostStates):
         for ghostState in ghostStates:
@@ -256,7 +257,9 @@ class BetterExtractor(FeatureExtractor):
 
         features = util.Counter()
 
-        features["bias"] = 1.0
+
+
+        features["bias"] = 1.0 * self.param['bias']
 
         # compute the location of pacman after he takes the action
         x, y = state.getPacmanPosition()
@@ -272,20 +275,37 @@ class BetterExtractor(FeatureExtractor):
             closestGhostState = min(
                 weakGhostStates,
                 key=lambda ghostState: distanceGhostState((next_x, next_y), ghostState, walls))
-            features['closest-weak-ghost-distance'] = 1 - distanceGhostState((next_x, next_y), closestGhostState, walls)
+            features['closest-weak-ghost-distance'] = 1 * self.param['closest_weak_ghost_0'] - self.param[
+                'closest_weak_ghost_1'] * distanceGhostState((next_x, next_y), closestGhostState, walls)
         # print('closest-weak-ghost-distance:', features['closest-weak-ghost-distance'])
 
         # Check strong ghosts are 1-step away
-        features['#-of-strong-ghost-1-step-away'] = sum(
+        features['#-of-strong-ghost-1-step-away'] = self.param['strong_ghost_1_step_0'] + self.param[
+            'strong_ghost_1_step_1'] * sum(
             (next_x, next_y) in Actions.getLegalNeighbors(ghostState.getPosition(), walls) for ghostState in
             self.getStrongGhostStates(ghostStates))
+
+        features['#-of-strong-ghost-2-step-away'] = self.param['strong_ghost_2_step_0'] + self.param['strong_ghost_2_step_1'] * (
+                sum(
+                    (next_x + 1, next_y) in Actions.getLegalNeighbors(ghostState.getPosition(), walls) for
+                    ghostState in
+                    self.getStrongGhostStates(ghostStates)) + sum(
+            (next_x - 1, next_y) in Actions.getLegalNeighbors(ghostState.getPosition(), walls) for ghostState in
+            self.getStrongGhostStates(ghostStates)) + sum(
+            (next_x, next_y + 1) in Actions.getLegalNeighbors(ghostState.getPosition(), walls) for ghostState in
+            self.getStrongGhostStates(ghostStates)) + sum(
+            (next_x, next_y - 1) in Actions.getLegalNeighbors(ghostState.getPosition(), walls) for ghostState in
+            self.getStrongGhostStates(ghostStates)))
+
         # print('#-of-strong-ghost-1-step-away:', features['#-of-strong-ghost-1-step-away'])
+        features['weak-ghost'] = self.param['weak_ghost_0'] + self.param['weak_ghost_1'] * float(
+            len(self.getWeakGhostStates(ghostStates)))
 
         # If there is no danger of ghosts or weak ghosts, then chase a capsule.
         if not self.hasWeakGhosts(ghostStates) and \
                 not self.isStrongGhostAtNeighbor(ghosts, features) and \
                 (next_x, next_y) in capsules:
-            features['eats-capsule'] = 1.0
+            features['eats-capsule'] = 10.0 * self.param['eats_capsule']
             # print('eats-capsule:', features['eats-capsule'])
 
         # If there is no danger of ghosts or weak ghosts and not capsule nearby, then eat a food.
@@ -294,13 +314,14 @@ class BetterExtractor(FeatureExtractor):
                 not capsules and \
                 not (next_x, next_y) in capsules and \
                 food[next_x][next_y]:
-            features['eats-food'] = 1.0
+            features['eats-food'] = 1.0 * self.param['eats_food']
             # print('eats-food:', features['eats-food'])
 
         capsuleDist = closestCapsule((next_x, next_y), capsules, walls)
         if not self.hasWeakGhosts(ghostStates) and \
                 capsuleDist is not None:
-            features['closest-capsule'] = float(capsuleDist) / (walls.width * walls.height)
+            features['closest-capsule'] = self.param['closest_capsule_0'] + self.param['closest_capsule_1'] * float(
+                capsuleDist) / (walls.width * walls.height)
             # print('closest-capsule:', features['closest-capsule'])
 
         foodDist = closestFood((next_x, next_y), food, walls)
@@ -309,7 +330,8 @@ class BetterExtractor(FeatureExtractor):
                 foodDist is not None:
             # make the distance a number less than one otherwise the update
             # will diverge wildly
-            features['closest-food'] = float(foodDist) / (walls.width * walls.height)
+            features['closest-food'] = self.param['closest_food_0'] + self.param['closest_food_1'] * float(foodDist) / (
+                        walls.width * walls.height)
             # print('closest-food:', features['closest-food'])
 
         # features["Tunnel"] = float(len(PacmanRules.getLegalActions(state)) <= 2)
