@@ -218,144 +218,32 @@ class ApproximateQAgent(PacmanQAgent):
             pass
 
 
-class BetterExtractor(FeatureExtractor):
-    "Your extractor entry goes here.  Add features for capsuleClassic."
-    def __init__(self):
-        import json
-        self.param = json.load(open('parameters.json'))
-
-    def hasWeakGhosts(self, ghostStates):
-        for ghostState in ghostStates:
-            if ghostState.scaredTimer > 0:
-                return True
-        return False
-
-    def isWeakGhost(self, ghostState):
-        return ghostState.scaredTimer > 0
-
-    def getWeakGhostStates(self, ghostStates):
-        return list(filter(lambda ghostState: ghostState.scaredTimer > 0, ghostStates))
-
-    def getStrongGhostStates(self, ghostStates):
-        return list(filter(lambda ghostState: ghostState.scaredTimer == 0, ghostStates))
-
-    def isStrongGhostAtNeighbor(self, ghosts, features):
-        return features['#-of-strong-ghost-1-step-away'] != 0
-
-    """
-    Generate your own feature
-    """
-
-    def getFeatures(self, state, action):
-        from pacman import PacmanRules
-        # extract the grid of food and wall locations and get the ghost locations
-        capsules = state.getCapsules()
-        food = state.getFood()
-        walls = state.getWalls()
-        ghostStates = state.getGhostStates()
-        ghosts = getGhostPositions(ghostStates)
-
-        features = util.Counter()
+get_weak_ghost_states = lambda y: list(filter(lambda x: x.scaredTimer > 0, y))
 
 
-
-        features["bias"] = 1.0 * self.param['bias']
-
-        # compute the location of pacman after he takes the action
-        x, y = state.getPacmanPosition()
-        dx, dy = Actions.directionToVector(action)
-        next_x, next_y = int(x + dx), int(y + dy)
-
-        weakGhostStates = list(filter(
-            lambda ghostState: distanceGhostState((next_x, next_y), ghostState, walls) is not None,
-            self.getWeakGhostStates(ghostStates)
-        ))
-
-        if weakGhostStates:
-            closestGhostState = min(
-                weakGhostStates,
-                key=lambda ghostState: distanceGhostState((next_x, next_y), ghostState, walls))
-            features['closest-weak-ghost-distance'] = 1 * self.param['closest_weak_ghost_0'] - self.param[
-                'closest_weak_ghost_1'] * distanceGhostState((next_x, next_y), closestGhostState, walls)
-        # print('closest-weak-ghost-distance:', features['closest-weak-ghost-distance'])
-
-        # Check strong ghosts are 1-step away
-        features['#-of-strong-ghost-1-step-away'] = self.param['strong_ghost_1_step_0'] + self.param[
-            'strong_ghost_1_step_1'] * sum(
-            (next_x, next_y) in Actions.getLegalNeighbors(ghostState.getPosition(), walls) for ghostState in
-            self.getStrongGhostStates(ghostStates))
-
-        features['#-of-strong-ghost-2-step-away'] = self.param['strong_ghost_2_step_0'] + self.param['strong_ghost_2_step_1'] * (
-                sum(
-                    (next_x + 1, next_y) in Actions.getLegalNeighbors(ghostState.getPosition(), walls) for
-                    ghostState in
-                    self.getStrongGhostStates(ghostStates)) + sum(
-            (next_x - 1, next_y) in Actions.getLegalNeighbors(ghostState.getPosition(), walls) for ghostState in
-            self.getStrongGhostStates(ghostStates)) + sum(
-            (next_x, next_y + 1) in Actions.getLegalNeighbors(ghostState.getPosition(), walls) for ghostState in
-            self.getStrongGhostStates(ghostStates)) + sum(
-            (next_x, next_y - 1) in Actions.getLegalNeighbors(ghostState.getPosition(), walls) for ghostState in
-            self.getStrongGhostStates(ghostStates)))
-
-        # print('#-of-strong-ghost-1-step-away:', features['#-of-strong-ghost-1-step-away'])
-        features['weak-ghost'] = self.param['weak_ghost_0'] + self.param['weak_ghost_1'] * float(
-            len(self.getWeakGhostStates(ghostStates)))
-
-        # If there is no danger of ghosts or weak ghosts, then chase a capsule.
-        if not self.hasWeakGhosts(ghostStates) and \
-                not self.isStrongGhostAtNeighbor(ghosts, features) and \
-                (next_x, next_y) in capsules:
-            features['eats-capsule'] = 10.0 * self.param['eats_capsule']
-            # print('eats-capsule:', features['eats-capsule'])
-
-        # If there is no danger of ghosts or weak ghosts and not capsule nearby, then eat a food.
-        if not self.hasWeakGhosts(ghostStates) and \
-                not self.isStrongGhostAtNeighbor(ghosts, features) and \
-                not capsules and \
-                not (next_x, next_y) in capsules and \
-                food[next_x][next_y]:
-            features['eats-food'] = 1.0 * self.param['eats_food']
-            # print('eats-food:', features['eats-food'])
-
-        capsuleDist = closestCapsule((next_x, next_y), capsules, walls)
-        if not self.hasWeakGhosts(ghostStates) and \
-                capsuleDist is not None:
-            features['closest-capsule'] = self.param['closest_capsule_0'] + self.param['closest_capsule_1'] * float(
-                capsuleDist) / (walls.width * walls.height)
-            # print('closest-capsule:', features['closest-capsule'])
-
-        foodDist = closestFood((next_x, next_y), food, walls)
-        if not self.hasWeakGhosts(ghostStates) and \
-                not capsules and \
-                foodDist is not None:
-            # make the distance a number less than one otherwise the update
-            # will diverge wildly
-            features['closest-food'] = self.param['closest_food_0'] + self.param['closest_food_1'] * float(foodDist) / (
-                        walls.width * walls.height)
-            # print('closest-food:', features['closest-food'])
-
-        # features["Tunnel"] = float(len(PacmanRules.getLegalActions(state)) <= 2)
-        features.divideAll(10.0)
-        return features
-
-
-def getGhostPositions(ghostStates):
-    positions = []
+def has_weak_ghosts(ghostStates):
     for ghostState in ghostStates:
-        x, y = ghostState.getPosition()
-        dx, dy = Actions.directionToVector(ghostState.getDirection())
-        positions.append((int(x + dx), int(y + dy)))
-    return positions
+        if ghostState.scaredTimer > 0:
+            return True
+    return False
+
+
+get_strong_ghost_states = lambda y: list(filter(lambda x: x.scaredTimer == 0, y))
+
+is_weak_ghost = lambda x: x.scaredTimer > 0
+
+is_strong_ghost_neighbor = lambda x: x['#-of-strong-ghost-1-step-away'] != 0
+
+get_ghost_positions = lambda x: [getGhostPosition(ghostState) for ghostState in x]
 
 
 def getGhostPosition(ghostState):
     x, y = ghostState.getPosition()
     dx, dy = Actions.directionToVector(ghostState.getDirection())
-    return (int(x + dx), int(y + dy))
+    return int(x + dx), int(y + dy)
 
 
-def distanceGhostState(pos, ghostState, walls):
-    ghost = getGhostPosition(ghostState)
+def distanceObject(pos, obj, walls):
     fringe = [(pos[0], pos[1], 0)]
     expanded = set()
     while fringe:
@@ -363,149 +251,104 @@ def distanceGhostState(pos, ghostState, walls):
         if (pos_x, pos_y) in expanded:
             continue
         expanded.add((pos_x, pos_y))
-        # If we find a ghost at this location then exit
-        if ghost == (pos_x, pos_y):
-            # make the distance a number less than one otherwise the update
-            # will diverge wildly
-            return float(dist) / (walls.width * walls.height)
-        # Otherwise spread out from the location to its neighbours
+        if (pos_x, pos_y) in obj:
+            return dist / (walls.width * walls.height)
         nbrs = Actions.getLegalNeighbors((pos_x, pos_y), walls)
         for nbr_x, nbr_y in nbrs:
             fringe.append((nbr_x, nbr_y, dist + 1))
-    # no ghost found
-    return None
-
-
-def distanceGhost(pos, ghost, walls):
-    fringe = [(pos[0], pos[1], 0)]
-    expanded = set()
-    while fringe:
-        pos_x, pos_y, dist = fringe.pop(0)
-        if (pos_x, pos_y) in expanded:
-            continue
-        expanded.add((pos_x, pos_y))
-        # If we find a ghost at this location then exit
-        if ghost == (pos_x, pos_y):
-            # make the distance a number less than one otherwise the update
-            # will diverge wildly
-            return float(dist) / (walls.width * walls.height)
-        # Otherwise spread out from the location to its neighbours
-        nbrs = Actions.getLegalNeighbors((pos_x, pos_y), walls)
-        for nbr_x, nbr_y in nbrs:
-            fringe.append((nbr_x, nbr_y, dist + 1))
-    # no ghost found
     return None
 
 
 def closestCapsule(pos, capsules, walls):
     if not capsules:
         return None
-
-    fringe = [(pos[0], pos[1], 0)]
-    expanded = set()
-    while fringe:
-        pos_x, pos_y, dist = fringe.pop(0)
-        if (pos_x, pos_y) in expanded:
-            continue
-        expanded.add((pos_x, pos_y))
-        # if we find a food at this location then exit
-        if (pos_x, pos_y) in capsules:
-            return dist
-        # otherwise spread out from the location to its neighbours
-        nbrs = Actions.getLegalNeighbors((pos_x, pos_y), walls)
-        for nbr_x, nbr_y in nbrs:
-            fringe.append((nbr_x, nbr_y, dist + 1))
-    # no food found
-    return None
+    else:
+        return distanceObject(pos, capsules, walls)
 
 
-def closestFood(pos, food, walls):
-    """
-    closestFood -- this is similar to the function that we have
-    worked on in the search project; here its all in one place
-    """
-    fringe = [(pos[0], pos[1], 0)]
-    expanded = set()
-    while fringe:
-        pos_x, pos_y, dist = fringe.pop(0)
-        if (pos_x, pos_y) in expanded:
-            continue
-        expanded.add((pos_x, pos_y))
-        # if we find a food at this location then exit
-        if food[pos_x][pos_y]:
-            return dist
-        # otherwise spread out from the location to its neighbours
-        nbrs = Actions.getLegalNeighbors((pos_x, pos_y), walls)
-        for nbr_x, nbr_y in nbrs:
-            fringe.append((nbr_x, nbr_y, dist + 1))
-    # no food found
-    return None
+distanceGhost = lambda pos, ghost, walls: distanceObject(pos, [ghost], walls)
 
-    # def getFeatures(self, state, action):
-    #     features = SimpleExtractor().getFeatures(state, action)
-    #     # Add more features here
-    #     "*** YOUR CODE HERE ***"
-    #
-    #     def closestItem(pos, itemlist, walls):
-    #         fringe = [(pos[0], pos[1], 0)]
-    #         expanded = set()
-    #         while fringe:
-    #             pos_x, pos_y, dist = fringe.pop(0)
-    #             if (pos_x, pos_y) in expanded:
-    #                 continue
-    #             expanded.add((pos_x, pos_y))
-    #             # if we find a food at this location then exit
-    #             if (pos_x, pos_y) in itemlist:
-    #                 return dist
-    #             # otherwise spread out from the location to its neighbours
-    #             nbrs = Actions.getLegalNeighbors((pos_x, pos_y), walls)
-    #             for nbr_x, nbr_y in nbrs:
-    #                 fringe.append((nbr_x, nbr_y, dist + 1))
-    #         # no food found
-    #         return None
-    #
-    #     from pacman import PacmanRules
-    #
-    #     pacmanPostion = state.getPacmanPosition()
-    #     capsules = state.getCapsules()
-    #     food = state.getFood()
-    #     walls = state.getWalls()
-    #     ghosts = state.getGhostPositions()
-    #     ghostStates = state.getGhostStates()
-    #     # distanceToGhost = closestItem(pacmanPostion, ghosts)
-    #     # Location after Pacman takes the action
-    #     x, y = state.getPacmanPosition()
-    #     dx, dy = Actions.directionToVector(action)
-    #     next_x, next_y = int(x + dx), int(y + dy)
-    #     distanceFood = closestFood((next_x, next_y), food, walls)
-    #     distanceCapsule = closestItem((next_x, next_y), capsules, walls) + 0.01
-    #     distanceToGhost = closestItem((next_x, next_y), ghosts, walls) + 0.01
-    #     features["Bias"] = 1.0
-    #
-    #     for ghost in ghostStates:
-    #         if ghost.scaredTimer > 0:
-    #             features["DistanceToClostestGhost"] = float(distanceToGhost) / (walls.width * walls.height)
-    #             features["ScaredGhost1StepAway"] = sum(
-    #                 (next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
-    #             if food[next_x][next_y]:
-    #                 features["Food"] = 1.0
-    #             if distanceFood is not None:
-    #                 features["ClosestFood"] = float(distanceFood) / (walls.width * walls.height)
-    #         else:
-    #             features["Ghost1StepAway"] = sum(
-    #                 (next_x, next_y) in Actions.getLegalNeighbors(g, walls) for g in ghosts)
-    #
-    #             if distanceCapsule is not None:
-    #                 features["DistanceToCapsule"] = 1.0 / (float(distanceCapsule))
-    #
-    #             if not features["Ghost1StepAway"] and food[next_x][next_y]:
-    #                 features["Food"] = 1.0
-    #
-    #             if distanceFood is not None:
-    #                 features["ClosestFood"] = float(distanceFood) / (walls.width * walls.height)
-    #
-    #             if len(PacmanRules.getLegalActions(state)) < 4:
-    #                 features["Tunnel"] = 1.0
-    #
-    #     features.divideAll(10.0)
-    #     return features
+distanceGhostState = lambda pos, ghostState, walls: distanceGhost(pos, getGhostPosition(ghostState), walls)
+
+
+class BetterExtractor(FeatureExtractor):
+    def __init__(self):
+        self.param = {
+            'bias': -1.1869386151859338,
+            'closest_weak_ghost_0': -0.4649615270560723,
+            'closest_weak_ghost_1': -4.850390180600743,
+            'strong_ghost_1_step_0': -6.569637113088273,
+            'strong_ghost_1_step_1': -7.795684250866552,
+            'strong_ghost_2_step_0': -6.785999786918713,
+            'strong_ghost_2_step_1': 2.555640948401763,
+            'weak_ghost_0': -3.400446220585069,
+            'weak_ghost_1': -2.0120989246248673,
+            'eats_capsule': 4.8657842860880525,
+            'eats_food': 9.077065896989659,
+            'closest_capsule_0': 5.98444945759584,
+            'closest_capsule_1': 4.2062442789363,
+            'closest_food_0': 4.791562262169061,
+            'closest_food_1': -1.959221289065276
+        }
+
+    def getFeatures(self, state, action):
+        from pacman import PacmanRules
+        capsules = state.getCapsules()
+        food = state.getFood()
+        walls = state.getWalls()
+        ghostStates = state.getGhostStates()
+        ghosts = get_ghost_positions(ghostStates)
+
+        x, y = state.getPacmanPosition()
+        dx, dy = Actions.directionToVector(action)
+        next_x, next_y = int(x + dx), int(y + dy)
+
+        features = util.Counter()
+
+        features["bias"] = 1.0 * self.param['bias']
+
+        weakGhostStates = list(filter(
+            lambda x: distanceGhostState((next_x, next_y), x, walls) is not None,
+            get_weak_ghost_states(ghostStates)
+        ))
+
+        strong_ghost_away = lambda next_x, next_y: sum(
+            (next_x, next_y) in Actions.getLegalNeighbors(ghostState.getPosition(), walls) for ghostState in
+            get_strong_ghost_states(ghostStates))
+
+        if weakGhostStates:
+            closestGhostState = min(weakGhostStates, key=lambda x: distanceGhostState((next_x, next_y), x, walls))
+            features['closest-weak-ghost-distance'] = self.param['closest_weak_ghost_0'] - self.param[
+                'closest_weak_ghost_1'] * distanceGhostState((next_x, next_y), closestGhostState, walls)
+
+        features['#-of-strong-ghost-1-step-away'] = self.param['strong_ghost_1_step_0'] + self.param[
+            'strong_ghost_1_step_1'] * strong_ghost_away(next_x, next_y)
+
+        features['#-of-strong-ghost-2-step-away'] = self.param['strong_ghost_2_step_0'] + self.param[
+            'strong_ghost_2_step_1'] * (sum(strong_ghost_away(nx, ny) for nx, ny in
+                                            [(next_x + 1, next_y), (next_x - 1, next_y),
+                                             (next_x, next_y + 1), (next_x, next_y - 1)]))
+
+        features['weak-ghost'] = self.param['weak_ghost_0'] + self.param['weak_ghost_1'] * float(
+            len(get_weak_ghost_states(ghostStates)))
+
+        if not ((has_weak_ghosts(ghostStates) or is_strong_ghost_neighbor(features)) or not (
+                (next_x, next_y) in capsules)):
+            features['eats-capsule'] = 10.0 * self.param['eats_capsule']
+
+        if not ((((has_weak_ghosts(ghostStates) or is_strong_ghost_neighbor(features)) or capsules) or (
+                next_x, next_y) in capsules) or not food[next_x][next_y]):
+            features['eats-food'] = self.param['eats_food']
+
+        capsule_dist = closestCapsule((next_x, next_y), capsules, walls)
+        if not (has_weak_ghosts(ghostStates) or not (capsule_dist is not None)):
+            features['closest-capsule'] = self.param['closest_capsule_0'] + self.param['closest_capsule_1'] * float(
+                capsule_dist)
+
+        food_dist = closestFood((next_x, next_y), food, walls)
+        if not ((has_weak_ghosts(ghostStates) or capsules) or not (food_dist is not None)):
+            features['closest-food'] = self.param['closest_food_0'] + self.param['closest_food_1'] * float(
+                food_dist) / (walls.width * walls.height)
+
+        features.divideAll(10.0)
+        return features

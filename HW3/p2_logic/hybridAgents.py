@@ -20,7 +20,7 @@ class BaseAgent(Agent):
     def observationFunction(self, gameState):
         walls = gameState.getWalls()
         currentState = gameState.getPacmanPosition()
-        ghosts = gameState.getGhostPositions()
+        ghosts = gameState.get_ghost_positions()
         
 #         ghosts = []
 #         for agents in board.agentPositions[1:]:

@@ -76,7 +76,7 @@ class SimpleExtractor(FeatureExtractor):
         # extract the grid of food and wall locations and get the ghost locations
         food = state.getFood()
         walls = state.getWalls()
-        ghosts = state.getGhostPositions()
+        ghosts = state.get_ghost_positions()
 
         features = util.Counter()
 
